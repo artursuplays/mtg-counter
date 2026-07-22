@@ -24,6 +24,15 @@ const UI = {
 
     document.getElementById('start-btn').addEventListener('click', () => App.startMatch());
     document.getElementById('oracle-action-btn').addEventListener('click', () => App.advanceOracle());
+    document.getElementById('install-btn').addEventListener('click', () => App.installPrompt.trigger());
+  },
+
+  showInstallButton() {
+    document.getElementById('install-btn').classList.add('show');
+  },
+
+  hideInstallButton() {
+    document.getElementById('install-btn').classList.remove('show');
   },
 
   bindGlobalEvents() {

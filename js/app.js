@@ -49,6 +49,7 @@ const App = {
   async init() {
     UI.bindSetupEvents();
     UI.bindGlobalEvents();
+    this.installPrompt.init();
     await Oracle.preloadDecks(); // tenta carregar decks cedo, silenciosamente
   },
 
@@ -116,6 +117,45 @@ const App = {
     if (this.wakeLock) {
       this.wakeLock.release();
       this.wakeLock = null;
+    }
+  },
+
+  /**
+   * Instalação como PWA — captura o beforeinstallprompt (Chrome/Edge/Android)
+   * pra oferecer um botão "Instalar App" próprio em vez de depender só do
+   * ícone da barra de endereço. Em navegadores sem suporte (Safari/iOS,
+   * Firefox) ou se o app já estiver instalado, o evento nunca chega e o
+   * botão simplesmente nunca aparece — não é um bug, é a plataforma.
+   */
+  installPrompt: {
+    deferredEvent: null,
+
+    init() {
+      const alreadyInstalled = window.matchMedia && window.matchMedia('(display-mode: standalone)').matches;
+      if (alreadyInstalled) return;
+
+      window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        this.deferredEvent = e;
+        UI.showInstallButton();
+      });
+
+      window.addEventListener('appinstalled', () => {
+        this.deferredEvent = null;
+        UI.hideInstallButton();
+        UI.toast('App instalado! 🎉');
+      });
+    },
+
+    async trigger() {
+      if (!this.deferredEvent) return;
+      const event = this.deferredEvent;
+      this.deferredEvent = null;
+      UI.hideInstallButton();
+
+      event.prompt();
+      const { outcome } = await event.userChoice;
+      if (outcome !== 'accepted') UI.toast('Instalação cancelada.');
     }
   },
 

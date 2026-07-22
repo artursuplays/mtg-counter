@@ -73,6 +73,18 @@ html, body {
 }
 .app-title span { color: var(--primary-color); }
 
+/* Botão "Instalar App" — só aparece quando o navegador dispara
+   beforeinstallprompt (Chrome/Edge/Android); some sem drama nos demais. */
+.install-btn {
+  display: none; align-items: center; gap: 8px;
+  background: transparent; border: 2px solid var(--arcane-color); color: #cbb8ff;
+  padding: 9px 18px; border-radius: 20px; font-size: 13px; font-weight: 700;
+  font-family: var(--font-body); cursor: pointer; margin-bottom: 18px;
+  transition: transform 0.15s, background-color 0.2s;
+}
+.install-btn.show { display: flex; }
+.install-btn:active { transform: scale(0.95); background-color: rgba(123, 92, 214, 0.18); }
+
 /* Card que agrupa os controles de setup, como no mockup */
 .setup-card {
   width: 100%; max-width: 400px;
