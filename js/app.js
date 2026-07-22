@@ -11,10 +11,12 @@ const CONFIG = {
   MIN_PLAYERS: 2,
   MAX_PLAYERS: 6,
   MIN_LIFE: 20,
-  MAX_LIFE: 40,
+  MAX_LIFE: 80,
   FORMATS: ['standard', 'commander'],
-  HOLD_REPEAT_DELAY_MS: 450,   // tempo até começar a repetição ao segurar
-  HOLD_REPEAT_INTERVAL_MS: 130, // intervalo entre repetições
+  HOLD_REPEAT_DELAY_MS: 450,   // tempo até começar a repetição ao segurar parado
+  HOLD_REPEAT_INTERVAL_MS: 130, // intervalo entre repetições ao segurar parado
+  DIAL_DRAG_THRESHOLD_PX: 10,  // movimento mínimo para tratar o gesto como arraste
+  DIAL_DRAG_STEP_PX: 24,       // px arrastados por ponto de vida
   DELTA_TIMEOUT_MS: 2000,
   // Mapa de quais jogadores ficam rotacionados 180° em cada layout (espelha o CSS)
   ROTATION_MAP: {
@@ -29,14 +31,17 @@ const CONFIG = {
 const App = {
   state: {
     format: 'standard',
-    startingLife: 20,
+    startingLife: 40,
     playersCount: 4,
     players: [],
     menuOpen: false,
     matchStartedAt: null,
+    matchId: null,
     totalLifeChanges: 0,
     decks: [],
-    decksLoaded: false
+    decksLoaded: false,
+    autoRotate: true,
+    soundOn: true
   },
 
   wakeLock: null,
@@ -122,7 +127,9 @@ const App = {
 
     const payload = {
       action: 'saveResult',
+      matchId: this.state.matchId,
       format: this.state.format,
+      startingLife: this.state.startingLife,
       winnerId,
       lifeChanges: this.state.totalLifeChanges,
       durationSeconds,
@@ -130,7 +137,8 @@ const App = {
         id: p.id,
         name: p.name || `Jogador ${p.id}`,
         deck: p.deck,
-        finalLife: p.life
+        finalLife: p.life,
+        deltaHistory: p.deltaHistory || []
       }))
     };
 
@@ -162,6 +170,7 @@ const App = {
     },
 
     tone(freq, durationMs, type = 'sine', gainValue = 0.15) {
+      if (!App.state.soundOn) return;
       try {
         const ctx = this.getContext();
         const osc = ctx.createOscillator();

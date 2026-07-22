@@ -6,6 +6,7 @@
 const Game = {
   startNewMatch(state) {
     state.matchStartedAt = Date.now();
+    state.matchId = `${Date.now()}-${Math.floor(Math.random() * 1000)}`;
     state.totalLifeChanges = 0;
     state.history = []; // pilha de undo: { playerId, change, timestamp }
     state.finished = false;
@@ -19,56 +20,103 @@ const Game = {
   },
 
   /**
-   * Toque direcional: metade direita da zona = +1 vida, metade esquerda = -1.
-   * Se o jogador estiver rotacionado 180° na tela (isFlipped), os lados são
-   * invertidos para que "direita" continue significando "+1" do ponto de
-   * vista do próprio jogador.
-   * Segurar (>450ms) repete a ação automaticamente (conveniência, não
-   * substitui o toque único que é o requisito principal).
+   * Dial de vida por jogador — toque, segurar e arrastar, tudo num único
+   * gesto de ponteiro por zona (em vez de dois listeners independentes por
+   * metade), pra permitir que o arraste mude de direção livremente:
+   *   - Toque único: aplica exatamente 1 ponto de vida (+1 na metade
+   *     direita, -1 na esquerda).
+   *   - Segurar parado (>450ms): repete a mudança na mesma direção do toque
+   *     inicial, em intervalos curtos.
+   *   - Arrastar (mais que DIAL_DRAG_THRESHOLD_PX): cancela a repetição por
+   *     "segurar" e passa a aplicar mudanças a cada DIAL_DRAG_STEP_PX de
+   *     deslocamento horizontal, na direção do arraste — como girar um dial.
+   * Se o jogador estiver rotacionado 180° na tela (isFlipped), a direção é
+   * invertida para que "direita"/arrastar-para-a-direita continue
+   * significando "+1" do ponto de vista do próprio jogador.
    */
-  bindTapMechanic(zone, player, isFlipped) {
+  bindDialMechanic(zone, player, isFlipped) {
     const minusEl = zone.querySelector('.tap-minus');
     const plusEl = zone.querySelector('.tap-plus');
 
-    const resolveChange = (side) => {
-      // side: 'minus' ou 'plus' conforme a metade física tocada
-      const isPlusSide = side === 'plus';
-      const effectivePlus = isFlipped ? !isPlusSide : isPlusSide;
-      return effectivePlus ? 1 : -1;
+    const effectiveSign = (movingRight) => {
+      const plus = isFlipped ? !movingRight : movingRight;
+      return plus ? 1 : -1;
     };
 
-    const bindSide = (el, side) => {
-      let holdTimeout = null;
-      let holdInterval = null;
-
-      const fire = () => {
-        this.updatePlayerLife(player.id, resolveChange(side));
-        UI.flashTapZone(zone, side);
-      };
-
-      const start = (e) => {
-        if (e.cancelable) e.preventDefault();
-        fire(); // toque único já aplica a mudança imediatamente
-        holdTimeout = setTimeout(() => {
-          holdInterval = setInterval(fire, CONFIG.HOLD_REPEAT_INTERVAL_MS);
-        }, CONFIG.HOLD_REPEAT_DELAY_MS);
-      };
-
-      const stop = () => {
-        clearTimeout(holdTimeout);
-        clearInterval(holdInterval);
-      };
-
-      el.addEventListener('touchstart', start, { passive: false });
-      el.addEventListener('touchend', stop);
-      el.addEventListener('touchcancel', stop);
-      el.addEventListener('mousedown', start);
-      el.addEventListener('mouseup', stop);
-      el.addEventListener('mouseleave', stop);
+    const apply = (sign) => {
+      this.updatePlayerLife(player.id, sign);
+      UI.flashTapZone(zone, sign > 0 ? 'plus' : 'minus');
     };
 
-    bindSide(minusEl, 'minus');
-    bindSide(plusEl, 'plus');
+    let holdTimeout = null;
+    let holdInterval = null;
+    let dragging = false;
+    let startX = 0;
+    let steppedPx = 0; // deslocamento já convertido em pontos de vida
+
+    const clearTimers = () => {
+      clearTimeout(holdTimeout);
+      clearInterval(holdInterval);
+      holdTimeout = null;
+      holdInterval = null;
+    };
+
+    const onPointerDown = (e) => {
+      if (e.button !== undefined && e.button !== 0) return;
+      try { zone.setPointerCapture && zone.setPointerCapture(e.pointerId); } catch (err) { /* captura opcional — não deve impedir o toque */ }
+      dragging = false;
+      startX = e.clientX;
+      steppedPx = 0;
+
+      const rect = zone.getBoundingClientRect();
+      const pressedRight = (e.clientX - rect.left) > rect.width / 2;
+      const sign = effectiveSign(pressedRight);
+
+      apply(sign); // toque único já aplica a mudança imediatamente
+
+      holdTimeout = setTimeout(() => {
+        holdInterval = setInterval(() => {
+          if (!dragging) apply(sign);
+        }, CONFIG.HOLD_REPEAT_INTERVAL_MS);
+      }, CONFIG.HOLD_REPEAT_DELAY_MS);
+    };
+
+    const onPointerMove = (e) => {
+      if (holdTimeout === null && holdInterval === null && !dragging) return; // sem gesto ativo
+      const totalDx = e.clientX - startX;
+
+      if (!dragging && Math.abs(totalDx) >= CONFIG.DIAL_DRAG_THRESHOLD_PX) {
+        dragging = true;
+        clearInterval(holdInterval); // arraste assume o controle da repetição
+        holdInterval = null;
+      }
+
+      if (!dragging) return;
+
+      const targetSteps = Math.trunc(totalDx / CONFIG.DIAL_DRAG_STEP_PX);
+      while (steppedPx < targetSteps) {
+        apply(effectiveSign(true));
+        steppedPx++;
+      }
+      while (steppedPx > targetSteps) {
+        apply(effectiveSign(false));
+        steppedPx--;
+      }
+    };
+
+    const onPointerUp = () => {
+      clearTimers();
+      dragging = false;
+    };
+
+    zone.addEventListener('pointerdown', onPointerDown);
+    zone.addEventListener('pointermove', onPointerMove);
+    zone.addEventListener('pointerup', onPointerUp);
+    zone.addEventListener('pointercancel', onPointerUp);
+
+    // Mantém os rótulos visuais de +/- nas metades (decorativo/estático).
+    minusEl.dataset.side = 'minus';
+    plusEl.dataset.side = 'plus';
   },
 
   updatePlayerLife(playerId, change, { skipHistory = false } = {}) {
@@ -111,6 +159,40 @@ const Game = {
     const change = newValue - player.life;
     if (change === 0) return;
     this.updatePlayerLife(playerId, change);
+  },
+
+  /**
+   * Ajusta a quantidade de jogadores em partida (item "Jogadores" do menu
+   * radial). Jogadores existentes mantêm vida/deck/histórico; jogadores
+   * novos entram com a vida inicial da partida. Reduzir remove os últimos
+   * assentos. Reconstrói o grid inteiro (UI.buildMatchUI).
+   */
+  changePlayerCount(newCount) {
+    const state = App.state;
+    newCount = Math.max(CONFIG.MIN_PLAYERS, Math.min(CONFIG.MAX_PLAYERS, newCount));
+    if (state.finished || newCount === state.players.length) return;
+
+    if (newCount > state.players.length) {
+      for (let id = state.players.length + 1; id <= newCount; id++) {
+        state.players.push({
+          id,
+          name: `Jogador ${id}`,
+          deck: '—',
+          deckEmoji: '🎴',
+          life: state.startingLife,
+          currentDelta: 0,
+          deltaTimeout: null,
+          deltaHistory: [],
+          alive: true
+        });
+      }
+    } else {
+      state.players.length = newCount;
+    }
+
+    state.playersCount = newCount;
+    UI.buildMatchUI(state);
+    UI.toast(`Jogadores ajustados para ${newCount}.`);
   },
 
   checkWinLossState() {

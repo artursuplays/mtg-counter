@@ -68,12 +68,23 @@ html, body {
   font-family: var(--font-display);
   font-size: 28px;
   letter-spacing: 1px;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
   text-align: center;
 }
 .app-title span { color: var(--primary-color); }
 
-.setup-section { margin-bottom: 26px; text-align: center; width: 100%; max-width: 400px; }
+/* Card que agrupa os controles de setup, como no mockup */
+.setup-card {
+  width: 100%; max-width: 400px;
+  background: rgba(28, 23, 32, 0.7);
+  border: 1px solid #322b3c;
+  border-radius: 18px;
+  padding: 24px 20px 20px;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+}
+
+.setup-section { margin-bottom: 22px; text-align: center; width: 100%; }
 .setup-section h2 {
   font-family: var(--font-display);
   font-size: 13px; text-transform: uppercase; letter-spacing: 2.5px;
@@ -95,26 +106,46 @@ html, body {
   color: #cbb8ff;
   box-shadow: 0 0 16px rgba(123, 92, 214, 0.35);
 }
+.pill.icon-pill { padding: 10px 16px; display: flex; align-items: center; justify-content: center; }
 
-/* Slider de vida inicial */
-#life-slider {
-  -webkit-appearance: none; width: 100%; max-width: 340px; height: 6px;
-  border-radius: 3px; background: #3a3442; outline: none; margin-top: 6px;
+/* Ajuste fino da vida inicial (20-80) além dos 6 presets do mockup */
+.life-fine-adjust { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 14px; }
+.life-fine-adjust .stepper-btn { width: 36px; height: 36px; font-size: 18px; }
+.life-fine-hint { font-size: 11px; color: var(--text-muted); letter-spacing: 0.3px; }
+
+/* Dropdown de formato — <select> nativo (acessível/robusto), tematizado */
+.select-field { position: relative; width: 100%; }
+.select-field select {
+  width: 100%; appearance: none; -webkit-appearance: none;
+  background-color: rgba(58, 52, 66, 0.35);
+  border: 2px solid #3a3442; color: #fff;
+  padding: 13px 40px 13px 18px; border-radius: 10px;
+  font-size: 16px; font-weight: 600; font-family: var(--font-body);
+  cursor: pointer;
 }
-#life-slider::-webkit-slider-thumb {
-  -webkit-appearance: none; width: 26px; height: 26px; border-radius: 50%;
-  background: var(--primary-color); border: 3px solid #1c1720; cursor: pointer;
-  box-shadow: 0 0 10px rgba(231, 112, 0, 0.6);
+.select-field select:focus { outline: none; border-color: var(--arcane-color); }
+.select-chevron {
+  position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
+  color: var(--text-muted); pointer-events: none;
 }
-#life-slider::-moz-range-thumb {
-  width: 26px; height: 26px; border-radius: 50%; background: var(--primary-color);
-  border: 3px solid #1c1720; cursor: pointer;
+
+/* Orientação: assentos (auto/eretos) + som */
+.orientation-row { display: flex; align-items: center; justify-content: center; gap: 14px; }
+.icon-toggle-btn {
+  width: 46px; height: 46px; border-radius: 10px; flex-shrink: 0;
+  background: transparent; border: 2px solid #3a3442; color: var(--text-muted);
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
 }
+.icon-toggle-btn .icon-sound-off { display: none; }
+.icon-toggle-btn.active { border-color: var(--arcane-color); color: #cbb8ff; }
+.icon-toggle-btn:not(.active) .icon-sound-on { display: none; }
+.icon-toggle-btn:not(.active) .icon-sound-off { display: block; }
 
 .start-btn {
   background-color: var(--primary-color); color: #fff; border: none;
   padding: 15px 40px; font-size: 18px; font-weight: 700; font-family: var(--font-display);
-  border-radius: 10px; cursor: pointer; margin-top: 12px; width: 100%; max-width: 400px;
+  border-radius: 10px; cursor: pointer; margin-top: 4px; width: 100%;
   transition: background-color 0.2s, transform 0.15s;
   letter-spacing: 0.5px;
 }
@@ -213,7 +244,24 @@ html, body {
   pointer-events: none; transition: color 0.15s; z-index: 2;
 }
 
-/* Toque direcional: metade esquerda = -1, metade direita = +1 */
+/* Dial de vida: toque/segurar/arrastar — direita = +1, esquerda = -1 */
+.dial-groove {
+  position: absolute; left: 8%; right: 8%; top: 50%; height: 34px;
+  transform: translateY(-50%); z-index: 1; border-radius: 17px;
+  background:
+    repeating-linear-gradient(90deg, rgba(255,255,255,0.05) 0 2px, transparent 2px 12px),
+    linear-gradient(180deg, #322b3c, #1a1620 55%, #322b3c);
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.5), inset 0 -1px 0 rgba(255,255,255,0.04);
+  pointer-events: none;
+}
+.dial-groove::before, .dial-groove::after {
+  content: ''; position: absolute; top: 0; bottom: 0; width: 14px;
+  background: linear-gradient(180deg, #ff9740, var(--primary-color) 60%, #a34e00);
+  opacity: 0.85;
+}
+.dial-groove::before { left: 0; border-radius: 17px 0 0 17px; }
+.dial-groove::after { right: 0; border-radius: 0 17px 17px 0; }
+
 .tap-zone {
   position: absolute; top: 0; bottom: 0; width: 50%; z-index: 3;
   display: flex; align-items: center; justify-content: center;
@@ -269,7 +317,7 @@ html, body {
 .delta-positive { color: var(--success-color); }
 .delta-negative { color: var(--danger-color); }
 
-/* ===== MENU RADIAL ===== */
+/* ===== MENU RADIAL (roda de segmentos) ===== */
 #radial-menu-container {
   position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
   z-index: 100; width: 58px; height: 58px;
@@ -279,27 +327,49 @@ html, body {
   width: 58px; height: 58px; border-radius: 50%;
   background-color: var(--primary-color); border: 3px solid #000; color: #fff;
   display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.55);
   position: absolute; top: 0; left: 0; z-index: 101; cursor: pointer;
   transition: transform 0.3s;
 }
 #radial-menu-container.open .radial-center-btn { transform: rotate(45deg); }
 
-.radial-item {
-  position: absolute; top: 8px; left: 8px; width: 42px; height: 42px;
-  border-radius: 50%; background-color: #2a2530; color: #fff;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 10px; font-weight: bold; text-align: center;
-  transform: translate(0, 0);
-  transition: transform 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s;
-  opacity: 0; z-index: 100; pointer-events: none;
-  border: 2px solid var(--arcane-color);
+/* Roda de wedges (SVG) — escondida/reduzida até abrir */
+.radial-wedges {
+  position: absolute; top: 50%; left: 50%; width: 240px; height: 240px;
+  transform: translate(-50%, -50%) scale(0.5); transform-origin: center;
+  opacity: 0; pointer-events: none; overflow: visible;
+  transition: transform 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.25s;
+  filter: drop-shadow(0 6px 18px rgba(0,0,0,0.5));
 }
-#radial-menu-container.open .radial-item {
+#radial-menu-container.open .radial-wedges {
+  opacity: 1; pointer-events: auto; transform: translate(-50%, -50%) scale(1);
+}
+
+.radial-wedge {
+  cursor: pointer;
+  stroke: #0f0d13; stroke-width: 2;
+  transition: fill 0.15s;
+}
+.radial-wedge.wedge-a { fill: #2a2340; }
+.radial-wedge.wedge-b { fill: #352c4d; }
+.radial-wedge:active { fill: var(--primary-color); }
+
+.radial-label {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(calc(-50% + var(--lx)), calc(-50% + var(--ly))) scale(0.5);
+  transform-origin: center;
+  width: 74px; text-align: center;
+  font-size: 12px; font-weight: 700; color: #ded4f5;
+  line-height: 1.15; letter-spacing: 0.2px;
+  opacity: 0; pointer-events: none; z-index: 102; cursor: pointer;
+  transition: transform 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.25s;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+}
+#radial-menu-container.open .radial-label {
   opacity: 1; pointer-events: auto;
-  transform: translate(var(--tx), var(--ty));
+  transform: translate(calc(-50% + var(--lx)), calc(-50% + var(--ly))) scale(1);
 }
-.radial-item:active { background-color: var(--arcane-color); }
+.radial-label:active { color: var(--primary-color); }
 
 /* ===== TOAST ===== */
 #toast {
@@ -328,3 +398,79 @@ html, body {
   padding: 14px 36px; font-size: 17px; font-family: var(--font-display); font-weight: 700;
   border-radius: 10px; cursor: pointer;
 }
+
+/* ===== MODAL GENÉRICO (substitui prompt()/alert()) ===== */
+.modal-overlay {
+  position: absolute; inset: 0; z-index: 400;
+  display: none; align-items: center; justify-content: center;
+  background: rgba(5, 4, 8, 0.78); backdrop-filter: blur(3px);
+  padding: 24px;
+}
+.modal-overlay.active { display: flex; animation: viewFadeIn 0.25s ease; }
+
+.modal-card {
+  width: 100%; max-width: 360px;
+  background: linear-gradient(180deg, var(--surface-color), #16121b);
+  border: 1px solid var(--arcane-color);
+  box-shadow: 0 0 40px rgba(123, 92, 214, 0.25), 0 12px 32px rgba(0,0,0,0.5);
+  border-radius: 16px; padding: 22px 20px;
+}
+
+.modal-title {
+  font-family: var(--font-display); font-size: 19px; text-align: center;
+  margin-bottom: 16px; letter-spacing: 0.5px;
+}
+
+.modal-body { min-height: 40px; margin-bottom: 18px; }
+
+.modal-actions { display: flex; gap: 10px; }
+.modal-btn {
+  flex: 1; padding: 12px 16px; border-radius: 10px; font-size: 15px; font-weight: 700;
+  font-family: var(--font-body); cursor: pointer; border: 2px solid #3a3442;
+  background: transparent; color: #fff; transition: transform 0.15s, background-color 0.2s;
+}
+.modal-btn:active { transform: scale(0.96); }
+.modal-btn-primary { background-color: var(--primary-color); border-color: var(--primary-color); }
+.modal-btn-secondary { color: var(--text-muted); }
+
+/* Seleção de jogador (usado no modal de Vida e de Jogadores) */
+.modal-player-row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 4px; }
+.modal-player-pill {
+  padding: 9px 16px; border-radius: 9px; border: 2px solid #3a3442; background: transparent;
+  color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; transition: border-color 0.2s, background-color 0.2s;
+}
+.modal-player-pill.active {
+  border-color: var(--arcane-color); background-color: rgba(123, 92, 214, 0.22); color: #cbb8ff;
+}
+
+/* Stepper de vida manual */
+.modal-stepper { display: flex; align-items: center; justify-content: center; gap: 22px; margin-top: 18px; }
+.stepper-btn {
+  width: 46px; height: 46px; border-radius: 50%; border: 2px solid var(--arcane-color);
+  background: transparent; color: #cbb8ff; font-size: 22px; font-weight: 700; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; line-height: 1;
+}
+.stepper-btn:active { background-color: var(--arcane-color); color: #fff; transform: scale(0.94); }
+.stepper-value { font-family: var(--font-display); font-size: 34px; min-width: 64px; text-align: center; }
+
+/* Dado / Moeda */
+.modal-dice-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.dice-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 14px 10px; border-radius: 10px; border: 2px solid #3a3442; background: transparent;
+  color: #fff; font-size: 13px; font-weight: 700; cursor: pointer; transition: border-color 0.2s;
+}
+.dice-btn:active { border-color: var(--primary-color); }
+.dice-icon { font-size: 26px; }
+.modal-dice-result {
+  text-align: center; margin-top: 14px; font-family: var(--font-display); font-size: 20px; min-height: 26px;
+}
+
+/* Menu expansível (undo, som) */
+.modal-menu-list { display: flex; flex-direction: column; gap: 10px; }
+.modal-menu-item {
+  padding: 14px 16px; border-radius: 10px; border: 2px solid #3a3442; background: transparent;
+  color: #fff; font-size: 15px; font-weight: 600; text-align: left; cursor: pointer;
+  transition: border-color 0.2s;
+}
+.modal-menu-item:active { border-color: var(--arcane-color); }

@@ -1,20 +1,25 @@
 /**
- * ui.js — Tudo que toca o DOM diretamente. Setup (formato/vida/jogadores),
- * fluxo do Oráculo em etapas, grid de partida com toque direcional (tap),
- * menu radial e overlays.
+ * ui.js — Tudo que toca o DOM diretamente. Setup (formato/vida/jogadores/
+ * orientação), fluxo do Oráculo em etapas, grid de partida com dial de
+ * vida (tap/hold/drag), menu radial (roda de segmentos) e modais temáticos
+ * (substituem prompt()/alert() do MVP).
  */
 
 const UI = {
   // ===== SETUP =====
   bindSetupEvents() {
-    this.setupPillGroup('format-pills', (val) => (App.state.format = val));
-    this.setupPillGroup('player-pills', (val) => (App.state.playersCount = parseInt(val, 10)));
+    document.getElementById('format-select').addEventListener('change', (e) => {
+      App.state.format = e.target.value;
+    });
 
-    const slider = document.getElementById('life-slider');
-    const label = document.getElementById('life-value');
-    slider.addEventListener('input', () => {
-      App.state.startingLife = parseInt(slider.value, 10);
-      label.innerText = slider.value;
+    this.bindLifeControls();
+    this.setupPillGroup('player-pills', (val) => (App.state.playersCount = parseInt(val, 10)));
+    this.setupPillGroup('rotation-pills', (val) => (App.state.autoRotate = val === 'auto'));
+
+    const soundBtn = document.getElementById('sound-toggle');
+    soundBtn.addEventListener('click', () => {
+      App.state.soundOn = !App.state.soundOn;
+      soundBtn.classList.toggle('active', App.state.soundOn);
     });
 
     document.getElementById('start-btn').addEventListener('click', () => App.startMatch());
@@ -23,6 +28,34 @@ const UI = {
 
   bindGlobalEvents() {
     document.body.addEventListener('pointerdown', () => App.audio.getContext(), { once: true });
+
+    document.getElementById('modal-overlay').addEventListener('click', (e) => {
+      if (e.target.id === 'modal-overlay') this.closeModal();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') this.closeModal();
+    });
+  },
+
+  /**
+   * Vida inicial: 6 presets do mockup (pills) + ajuste fino de ±5 pra
+   * cobrir o intervalo completo 20-80 (os presets sozinhos vão só até 60).
+   */
+  bindLifeControls() {
+    const pills = document.querySelectorAll('#life-pills .pill');
+    const label = document.getElementById('life-value');
+
+    const setLife = (val) => {
+      val = Math.max(CONFIG.MIN_LIFE, Math.min(CONFIG.MAX_LIFE, val));
+      App.state.startingLife = val;
+      label.innerText = val;
+      pills.forEach(p => p.classList.toggle('active', parseInt(p.dataset.val, 10) === val));
+    };
+
+    pills.forEach(pill => pill.addEventListener('click', () => setLife(parseInt(pill.dataset.val, 10))));
+    document.getElementById('life-minus').addEventListener('click', () => setLife(App.state.startingLife - 5));
+    document.getElementById('life-plus').addEventListener('click', () => setLife(App.state.startingLife + 5));
+    setLife(App.state.startingLife);
   },
 
   setupPillGroup(groupId, callback) {
@@ -75,7 +108,7 @@ const UI = {
     grid.className = `match-grid layout-${state.playersCount}`;
     grid.innerHTML = '';
 
-    const rotatedIds = CONFIG.ROTATION_MAP[state.playersCount] || [];
+    const rotatedIds = state.autoRotate ? (CONFIG.ROTATION_MAP[state.playersCount] || []) : [];
 
     state.players.forEach(player => {
       const isFlipped = rotatedIds.includes(player.id);
@@ -84,6 +117,7 @@ const UI = {
       zone.dataset.playerId = player.id;
 
       zone.innerHTML = `
+        <div class="dial-groove"></div>
         <div class="tap-zone tap-minus" data-side="minus"><span class="tap-hint">−</span></div>
         <div class="tap-zone tap-plus" data-side="plus"><span class="tap-hint">+</span></div>
         <div class="life-total" id="life-${player.id}">${player.life}</div>
@@ -91,7 +125,7 @@ const UI = {
         <div class="player-deck-name">${player.deckEmoji || ''} ${player.deck}</div>
       `;
 
-      Game.bindTapMechanic(zone, player, isFlipped);
+      Game.bindDialMechanic(zone, player, isFlipped);
       grid.appendChild(zone);
     });
 
@@ -137,38 +171,63 @@ const UI = {
     if (zone) zone.classList.add('defeated');
   },
 
-  // ===== MENU RADIAL =====
+  // ===== MENU RADIAL (roda de segmentos) =====
   buildRadialMenu(state) {
     const container = document.getElementById('radial-menu-container');
-    container.querySelectorAll('.radial-item').forEach(el => el.remove());
+    const svg = document.getElementById('radial-wedges');
+    svg.innerHTML = '';
+    container.querySelectorAll('.radial-label').forEach(el => el.remove());
 
     const items = [
-      { label: 'Vida', action: () => this.promptManualLife(state) },
-      { label: 'Undo', action: () => Game.undoLast() },
-      { label: 'Dado', action: () => this.openDiceMenu() },
-      { label: 'Coin', action: () => this.flipCoinDisplay() },
-      { label: 'Reset', action: () => App.resetToSetup(true) }
+      { label: 'Vida', action: () => this.openLifeModal(state) },
+      { label: 'Jogadores', action: () => this.openPlayerCountModal(state) },
+      { label: 'Dado/Coin', action: () => this.openDiceCoinModal() },
+      { label: 'Reset', action: () => App.resetToSetup(true) },
+      { label: 'Menu', action: () => this.openExpandableMenu() }
     ];
 
-    const radius = 90;
-    items.forEach((item, index) => {
-      const angle = (index / items.length) * (2 * Math.PI) - Math.PI / 2;
-      const x = Math.cos(angle) * radius;
-      const y = Math.sin(angle) * radius;
+    const n = items.length;
+    const stepDeg = 360 / n;
+    const gapDeg = 3;
+    const rInner = 46;
+    const rOuter = 116;
+    const rLabel = (rInner + rOuter) / 2;
+    const rad = deg => (deg * Math.PI) / 180;
+    const point = (r, deg) => [r * Math.cos(rad(deg)), r * Math.sin(rad(deg))];
 
-      const el = document.createElement('div');
-      el.className = 'radial-item';
-      el.innerText = item.label;
-      el.style.setProperty('--tx', `${x}px`);
-      el.style.setProperty('--ty', `${y}px`);
+    items.forEach((item, i) => {
+      const center = i * stepDeg - 90;
+      const a0 = center - stepDeg / 2 + gapDeg / 2;
+      const a1 = center + stepDeg / 2 - gapDeg / 2;
 
-      el.addEventListener('click', (e) => {
+      const [x1, y1] = point(rOuter, a0);
+      const [x2, y2] = point(rOuter, a1);
+      const [x3, y3] = point(rInner, a1);
+      const [x4, y4] = point(rInner, a0);
+      const d = `M ${x1} ${y1} A ${rOuter} ${rOuter} 0 0 1 ${x2} ${y2} L ${x3} ${y3} A ${rInner} ${rInner} 0 0 0 ${x4} ${y4} Z`;
+
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', d);
+      path.setAttribute('class', `radial-wedge ${i % 2 === 0 ? 'wedge-a' : 'wedge-b'}`);
+      path.addEventListener('click', (e) => {
         e.stopPropagation();
         item.action();
         this.toggleMenu();
       });
+      svg.appendChild(path);
 
-      container.appendChild(el);
+      const [lx, ly] = point(rLabel, center);
+      const label = document.createElement('div');
+      label.className = 'radial-label';
+      label.innerText = item.label;
+      label.style.setProperty('--lx', `${lx}px`);
+      label.style.setProperty('--ly', `${ly}px`);
+      label.addEventListener('click', (e) => {
+        e.stopPropagation();
+        item.action();
+        this.toggleMenu();
+      });
+      container.appendChild(label);
     });
   },
 
@@ -177,29 +236,140 @@ const UI = {
     document.getElementById('radial-menu-container').classList.toggle('open', App.state.menuOpen);
   },
 
-  promptManualLife(state) {
-    const idStr = prompt(`Editar vida de qual jogador? (1-${state.players.length})`);
-    const id = parseInt(idStr, 10);
-    const player = state.players.find(p => p.id === id);
-    if (!player) return;
+  // ===== MODAL GENÉRICO =====
+  openModal(title, bodyHTML, buttons) {
+    document.getElementById('modal-title').innerText = title;
+    this.setModalBody(bodyHTML);
 
-    const valStr = prompt(`Novo valor de vida para Jogador ${id} (atual: ${player.life}):`);
-    const val = parseInt(valStr, 10);
-    if (!Number.isNaN(val)) Game.setLifeManually(id, val);
+    const actions = document.getElementById('modal-actions');
+    actions.innerHTML = '';
+    buttons.forEach(b => {
+      const btn = document.createElement('button');
+      btn.className = `modal-btn ${b.className || ''}`;
+      btn.innerText = b.label;
+      btn.addEventListener('click', () => {
+        const shouldClose = b.onClick ? b.onClick() : true;
+        if (shouldClose !== false) this.closeModal();
+      });
+      actions.appendChild(btn);
+    });
+
+    document.getElementById('modal-overlay').classList.add('active');
   },
 
-  flipCoinDisplay() {
-    const result = Dice.flipCoin();
-    this.toast(`🪙 ${result}`);
+  setModalBody(html) {
+    document.getElementById('modal-body').innerHTML = html;
   },
 
-  openDiceMenu() {
-    const choice = prompt('Qual dado? Digite: 6, 10 ou 100');
-    const map = { '6': () => Dice.rollD6(), '10': () => Dice.rollD10(), '100': () => Dice.rollD100() };
-    const rollFn = map[choice];
-    if (!rollFn) return;
-    const result = rollFn();
-    this.toast(`🎲 d${choice}: ${result}`);
+  closeModal() {
+    document.getElementById('modal-overlay').classList.remove('active');
+  },
+
+  // ===== AÇÕES DO MENU RADIAL (conteúdo dos modais) =====
+  openLifeModal(state) {
+    let selectedId = (state.players.find(p => p.alive) || state.players[0]).id;
+    let value = state.players.find(p => p.id === selectedId).life;
+
+    const render = () => {
+      const playerPills = state.players.map(p => `
+        <button type="button" class="modal-player-pill ${p.id === selectedId ? 'active' : ''}" data-id="${p.id}">${p.name}</button>
+      `).join('');
+
+      this.setModalBody(`
+        <div class="modal-player-row">${playerPills}</div>
+        <div class="modal-stepper">
+          <button type="button" class="stepper-btn" data-step="-1">−</button>
+          <span class="stepper-value" id="modal-life-value">${value}</span>
+          <button type="button" class="stepper-btn" data-step="1">+</button>
+        </div>
+      `);
+
+      document.querySelectorAll('.modal-player-pill').forEach(btn => {
+        btn.addEventListener('click', () => {
+          selectedId = parseInt(btn.dataset.id, 10);
+          value = state.players.find(p => p.id === selectedId).life;
+          render();
+        });
+      });
+      document.querySelectorAll('.stepper-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          value += parseInt(btn.dataset.step, 10);
+          document.getElementById('modal-life-value').innerText = value;
+        });
+      });
+    };
+
+    this.openModal('Editar Vida', '', [
+      { label: 'Cancelar', className: 'modal-btn-secondary' },
+      { label: 'Confirmar', className: 'modal-btn-primary', onClick: () => { Game.setLifeManually(selectedId, value); } }
+    ]);
+    render();
+  },
+
+  openPlayerCountModal(state) {
+    const pills = [];
+    for (let n = CONFIG.MIN_PLAYERS; n <= CONFIG.MAX_PLAYERS; n++) {
+      pills.push(`<button type="button" class="modal-player-pill ${n === state.playersCount ? 'active' : ''}" data-n="${n}">${n}</button>`);
+    }
+
+    this.openModal('Quantidade de Jogadores', `<div class="modal-player-row">${pills.join('')}</div>`, [
+      { label: 'Fechar', className: 'modal-btn-secondary' }
+    ]);
+
+    document.querySelectorAll('.modal-player-pill').forEach(btn => {
+      btn.addEventListener('click', () => {
+        Game.changePlayerCount(parseInt(btn.dataset.n, 10));
+        this.closeModal();
+      });
+    });
+  },
+
+  openDiceCoinModal() {
+    const rollMap = {
+      coin: () => Dice.flipCoin(),
+      '6': () => Dice.rollD6(),
+      '10': () => Dice.rollD10(),
+      '100': () => Dice.rollD100()
+    };
+
+    this.openModal('Dado / Moeda', `
+      <div class="modal-dice-grid">
+        <button type="button" class="dice-btn" data-roll="coin"><span class="dice-icon">🪙</span>Moeda</button>
+        <button type="button" class="dice-btn" data-roll="6"><span class="dice-icon">🎲</span>d6</button>
+        <button type="button" class="dice-btn" data-roll="10"><span class="dice-icon">🎲</span>d10</button>
+        <button type="button" class="dice-btn" data-roll="100"><span class="dice-icon">🎲</span>d100</button>
+      </div>
+      <p class="modal-dice-result" id="modal-dice-result">&nbsp;</p>
+    `, [{ label: 'Fechar', className: 'modal-btn-secondary' }]);
+
+    document.querySelectorAll('.dice-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const key = btn.dataset.roll;
+        const result = rollMap[key]();
+        document.getElementById('modal-dice-result').innerText =
+          key === 'coin' ? `🪙 ${result}` : `🎲 d${key}: ${result}`;
+      });
+    });
+  },
+
+  openExpandableMenu() {
+    this.openModal('Menu', `
+      <div class="modal-menu-list">
+        <button type="button" class="modal-menu-item" id="modal-undo-btn">↺ Desfazer última jogada</button>
+        <button type="button" class="modal-menu-item" id="modal-sound-btn">
+          ${App.state.soundOn ? '🔊 Som ligado' : '🔇 Som desligado'}
+        </button>
+      </div>
+    `, [{ label: 'Fechar', className: 'modal-btn-secondary' }]);
+
+    document.getElementById('modal-undo-btn').addEventListener('click', () => {
+      Game.undoLast();
+      this.closeModal();
+    });
+    document.getElementById('modal-sound-btn').addEventListener('click', () => {
+      App.state.soundOn = !App.state.soundOn;
+      document.getElementById('modal-sound-btn').innerText = App.state.soundOn ? '🔊 Som ligado' : '🔇 Som desligado';
+    });
   },
 
   // ===== OVERLAYS =====
