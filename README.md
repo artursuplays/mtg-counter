@@ -18,7 +18,24 @@ mtg-counter/
     icons/     — ícones PWA (placeholders gerados — troque pelos definitivos)
   gas/Code.gs  — backend Apps Script (deploy separado, não vai pro Pages)
   manifest.json, sw.js — PWA
+  deck-lab/index.html  — carona: outra página, ver abaixo
 ```
+
+## Carona: Deck Lab
+
+`deck-lab/index.html` publica em `https://SEU_USUARIO.github.io/mtg-counter/deck-lab/`
+a visualização de ranking de força e matriz de matchup dos pods de Commander e
+Standard. **Não faz parte do contador** e não compartilha nada com ele — nem
+código, nem CSS, nem o backend. Mora aqui porque este é o único repositório com
+remoto e GitHub Pages ligados, e a página precisava de uma URL clicável.
+
+É um arquivo único, autocontido, gerado por `MTG/deck-lab/scripts/build_html.py
+--format all` no repositório de instruções; para atualizar, gere de novo, copie
+por cima e faça commit. O service worker do contador **ignora** `/deck-lab/`
+de propósito (ver `sw.js`), para não servir ranking velho de cache.
+
+Se um dia ela ganhar repositório próprio, apague esta pasta e a exceção no
+`sw.js` junto.
 
 ## Deploy — passo a passo
 

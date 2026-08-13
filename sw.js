@@ -45,6 +45,10 @@ self.addEventListener('activate', (event) => {
  */
 self.addEventListener('fetch', (event) => {
   if (event.request.url.includes('script.google.com')) return; // API do Apps Script: sempre rede
+  // /deck-lab/ é outra página, hospedada aqui só porque este repo já tem Pages.
+  // Fora do app-shell do contador de propósito: são 600 KB que não têm nada a
+  // ver com jogar, e cacheá-los faria o visitante ver um ranking velho.
+  if (event.request.url.includes('/deck-lab/')) return;
 
   event.respondWith(
     caches.open(CACHE_NAME).then(async (cache) => {
